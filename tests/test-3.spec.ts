@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
+import * as fs from "fs";
 
 const placeTypes = [
-  // "School",
+  "School",
   // "Care Home",
   // "Hospital",
-  "Business",
+  // "Business",
   // "Place Of Worship",
 ];
 
@@ -18,6 +19,9 @@ interface Place {
 
   phoneNumber?: string;
   webSite?: string;
+
+  latitudeText?: string;
+  longitudeText?: string;
 }
 
 test("test", async ({ page }) => {
@@ -29,13 +33,13 @@ test("test", async ({ page }) => {
   // await page.getByRole("button", { name: "Reject all" }).click();
   // await page.getByLabel("Search Google Maps").click();
   // await page.getByLabel("Search Google Maps").fill("Schools near Dursley");
-  await page.goto("https://www.google.com/maps");
+  await page.goto("https://www.google.co.uk/maps");
   await page.getByRole("button", { name: "Reject all" }).click();
 
   for (const placeType of placeTypes) {
     // const searchTerm = `${placeType} near Stinchcombe`;
     // const searchTerm = `${placeType} in Shepton Mallet`;
-    const searchTerm = `${placeType} in Shepton Mallet`;
+    const searchTerm = `${placeType} in Chippenham`;
 
     await page.locator("#searchboxinput").click();
     // await page.locator("#searchboxinput").fill("Schools near Dursley");
@@ -45,23 +49,25 @@ test("test", async ({ page }) => {
     // const anchorUrlToken = "/maps/place";
 
     await page.waitForTimeout(5000);
-    const placeCount = await page
+    const allListings = await page
       // .locator('//a[contains(@href, "https://www.google.com/maps/place")]')
       .locator('//a[contains(@href, "/maps/place")]')
-      .count();
+      .all();
+
+    let placeCount = allListings.length;
 
     if (placeCount < 1) {
       // expect(false).toBe(true);
       continue;
     }
 
-    const endOfListLocator = page.locator('//span[contains(@class, "HlvSq")]');
+    // const endOfListLocator = page.locator('//span[contains(@class, "HlvSq")]');
     // # scrolling
-    page.hover('//a[contains(@href, "https://www.google.com/maps/place")]');
+    await page.hover('//a[contains(@href, "/maps/place")]');
 
     // # this variable is used to detect if the bot
     // # scraped the same number of listings in the previous iteration
-    let previously_counted = 0;
+    let previously_counted = placeCount;
 
     let listings = await page
       .locator('//a[contains(@href, "/maps/place")]')
@@ -70,27 +76,40 @@ test("test", async ({ page }) => {
 
     console.log(`listingsCount = ${listings.length}`);
 
+    previously_counted = listings.length;
+
     while (true) {
-      page.mouse.wheel(0, 10000);
-      page.waitForTimeout(3000);
+      await page.mouse.wheel(0, 10000);
+      await page.waitForTimeout(3000);
 
       //         # logic to break from loop to not run infinitely
       //         # in case arrived at all available listings
-      const currentItemCount = await page
-        .locator('//a[contains(@href, "https://www.google.com/maps/place")]')
-        .count();
+      // const currentItemCount = await page
+      //   .locator('//a[contains(@href, "/maps/place")]')
+      //   .count();
+
+      listings = await page
+        .locator('//a[contains(@href, "/maps/place")]')
+        .all();
+
+      await page.waitForTimeout(3000);
+
+      const currentItemCount = listings.length;
 
       if (currentItemCount == previously_counted) {
         listings = await page
-          .locator('//a[contains(@href, "https://www.google.com/maps/place")]')
+          .locator('//a[contains(@href, "/maps/place")]')
           .all();
         console.log(
           `Arrived at all available\nTotal Scraped: ${listings.length}`
         );
+
+        previously_counted = currentItemCount;
+
         break;
       } else {
         previously_counted = await page
-          .locator('//a[contains(@href, "https://www.google.com/maps/place")]')
+          .locator('//a[contains(@href, "/maps/place")]')
           .count();
 
         console.log(`Currently Scraped: ${previously_counted}`);
@@ -171,6 +190,36 @@ test("test", async ({ page }) => {
 
       console.log(`placeIndex [${++listingIndex}] of [${previously_counted}]`);
 
+      const urlText = page.url();
+      console.log(`URL = [${urlText}]`);
+
+      const url = new URL(urlText);
+      const urlPathName = url.pathname;
+      console.log(`urlPathName = [${urlPathName}]`);
+      const urlPathNameParts = urlPathName.split("/");
+      const coordsSegment = urlPathNameParts[4];
+      console.log(`coordsSegment = [${coordsSegment}]`);
+      const coordsTrimmed = coordsSegment.replace("@", "").replace("z", "");
+      console.log(`coordsSegment = [${coordsTrimmed}]`);
+      const coordsParts = coordsTrimmed.split(",");
+      console.log(`coordsParts[0] = [${coordsParts[0]}]`);
+      console.log(`coordsParts[1] = [${coordsParts[1]}]`);
+
+      const dataSegment = urlPathNameParts.find((val) =>
+        val.startsWith("data=")
+      );
+      const dataParts = dataSegment?.replace("data=", "").split("!");
+      const latDataPart = dataParts
+        ?.find((val) => val.startsWith("3d"))
+        ?.replace("3d", "");
+      const longDataPart = dataParts
+        ?.find((val) => val.startsWith("4d"))
+        ?.replace("4d", "");
+
+      // const coordsParts = coordsTrimmed.split(",");
+      console.log(`latDataPart = [${latDataPart}]`);
+      console.log(`longDataPart = [${longDataPart}]`);
+
       const nameValue = await listing.getAttribute(name_attibute);
       const category = await page.locator(category_xpath).innerText();
 
@@ -217,6 +266,8 @@ test("test", async ({ page }) => {
         postCode: postCode,
         phoneNumber: phoneNumber,
         webSite: !!websiteDomain ? `https://${websiteDomain}` : "",
+        latitudeText: latDataPart,
+        longitudeText: longDataPart,
       };
 
       console.log(`The placeType is ${listingPlace.type}`);
@@ -226,13 +277,27 @@ test("test", async ({ page }) => {
       console.log(`The business PostCode is ${listingPlace.postCode}`);
       console.log(`The business Phone is ${listingPlace.phoneNumber}`);
       console.log(`The business Web Site is ${listingPlace.webSite}`);
+      console.log(`The business latitudeText is ${listingPlace.latitudeText}`);
+      console.log(
+        `The business longitudeText is ${listingPlace.longitudeText}`
+      );
 
       places.push(listingPlace);
     }
   }
 
   const placesCsv = [
-    ["Type", "Category", "Name", "Address", "Postcode", "Telephone", "WebSite"],
+    [
+      "Type",
+      "Category",
+      "Name",
+      "Address",
+      "Postcode",
+      "Telephone",
+      "WebSite",
+      "Latitude",
+      "Longitude",
+    ],
     ...places.map((place) => [
       place.type,
       place.category,
@@ -241,12 +306,20 @@ test("test", async ({ page }) => {
       place.postCode,
       place.phoneNumber,
       place.webSite,
+      place.latitudeText,
+      place.longitudeText,
     ]),
   ]
-    .map((e) => e.join("|"))
+    .map((e) => e.join("\t"))
     .join("\n");
 
   console.log(placesCsv);
+
+  fs.writeFileSync(
+    "C:\\Martin\\Docs\\2025\\Gis\\Chippenham.82.VBar.csv",
+    placesCsv,
+    "utf-8"
+  );
 
   // // # scraping
   // listings.forEach((listing) => {

@@ -3,10 +3,10 @@ import * as fs from "fs";
 
 const placeTypes = [
   "School",
-  // "Care Home",
-  // "Hospital",
-  // "Business",
-  // "Place Of Worship",
+  "Care Home",
+  "Hospital",
+  "Business",
+  "Place Of Worship",
 ];
 
 interface Place {
@@ -36,10 +36,13 @@ test("test", async ({ page }) => {
   await page.goto("https://www.google.co.uk/maps");
   await page.getByRole("button", { name: "Reject all" }).click();
 
+  const searchProximity = "near";
+  const searchLocation = "Dursley";
+
   for (const placeType of placeTypes) {
     // const searchTerm = `${placeType} near Stinchcombe`;
     // const searchTerm = `${placeType} in Shepton Mallet`;
-    const searchTerm = `${placeType} in Chippenham`;
+    const searchTerm = `${placeType} near Dursley`;
 
     await page.locator("#searchboxinput").click();
     // await page.locator("#searchboxinput").fill("Schools near Dursley");
@@ -310,16 +313,14 @@ test("test", async ({ page }) => {
       place.longitudeText,
     ]),
   ]
-    .map((e) => e.join("\t"))
+    .map((e) => e.join("|"))
     .join("\n");
 
   console.log(placesCsv);
 
-  fs.writeFileSync(
-    "C:\\Martin\\Docs\\2025\\Gis\\Chippenham.82.VBar.csv",
-    placesCsv,
-    "utf-8"
-  );
+  const fileFullPath = `C:\\Martin\\Docs\\2025\\Gis\\${searchLocation}.${searchProximity}.csv`;
+
+  fs.writeFileSync(fileFullPath, placesCsv, "utf-8");
 
   // // # scraping
   // listings.forEach((listing) => {
